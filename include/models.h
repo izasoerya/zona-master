@@ -7,8 +7,8 @@ struct SensorData
     float temperature = 0.0f;
     float humidity = 0.0f;
     float ammonia = 0.0f;
-    float lux = 0.0f;
-    float windSpeed = 0.0f;
+    int lux = 0;
+    int windSpeed = 0;
     int led = 0;
     int blower = 0;
     int pump = 0;
@@ -23,6 +23,13 @@ struct SensorData
                "Wind Speed: " + String(windSpeed) + " m/s\n" +
                "Age:" + String(age) + " hari\n";
     }
+};
+
+struct DateTime
+{
+    int year = 2000;
+    int month = 1;
+    int day = 1;
 };
 
 enum RunMode

@@ -5,11 +5,17 @@
 #include <ArduinoJson.h>
 #include <regex> // Include the regex library
 
+#include "time.h"
 #include "models.h"
+#include "nextion.h"
 
 // WiFi credentials
 const char *ssid = "Subhanallah";
 const char *password = "muhammadnabiyullah";
+
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 25200; // Replace with your GMT offset (seconds)
+const int daylightOffset_sec = 0; // Replace with your daylight offset (seconds)
 
 // MQTT broker details
 const char *mqtt_server = "zona-api.theunra.site";
@@ -18,20 +24,16 @@ const int mqtt_port = 1883;
 WiFiClient espClient;
 PubSubClient client(espClient);
 SensorData data;
+NextionLCD lcd;
 JsonDocument doc;
+DateTime date;
+
 RunMode mode = NORMAL;
 
-void sendHumidityToNextion();
-void readSensor();
-void sendAgeToNextion();
-void sendHumidityToNextion();
-void sendTemperatureToNextion();
-void sendAmmoniaToNextion();
-void sendLuxToNextion();
-void sendWindSpeedToNextion();
-void endNextionCommand();
 void setup_wifi();
 void reconnect();
+bool readSensor();
+void printLocalTime();
 void assignCommand(char response[]);
 void callback(char *topic, byte *message, unsigned int length);
 void autoMode();
@@ -47,6 +49,23 @@ void setup()
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
+
+  printLocalTime();
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+}
+
+void printLocalTime()
+{
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))
+  {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  date.day = timeinfo.tm_mday;
+  date.month = timeinfo.tm_mon + 1;
+  date.year = timeinfo.tm_year + 1900;
+  Serial.println(String(date.day) + "/" + String(date.month) + "/" + String(date.year));
 }
 
 // Function to find the pattern using regex and capture the subsequent data
@@ -63,64 +82,74 @@ String findPattern(const String &str)
   return "";
 }
 
+char response[100];
+
 void loop()
 {
   if (!client.connected())
+  {
     reconnect();
+  }
   client.loop();
 
-  readSensor();
-  sendAgeToNextion();
-  sendHumidityToNextion();
-  sendTemperatureToNextion();
-  sendAmmoniaToNextion();
-  sendLuxToNextion();
-  sendWindSpeedToNextion();
+  bool responseSensor = readSensor();
+  if (responseSensor)
+  {
+    lcd.sendAgeToNextion(data);
+    lcd.sendHumidityToNextion(data);
+    lcd.sendTemperatureToNextion(data);
+    lcd.sendAmmoniaToNextion(data);
+    lcd.sendLuxToNextion(data);
+    lcd.sendWindSpeedToNextion(data);
+    lcd.sendDateTimeToNextion(date);
+  }
 
-  char response[100] = "";
+  memset(response, 0, sizeof(response));
 
-  while (Serial2.available())
-  {
-    String responseString = Serial2.readString();
-    Serial.println("data: " + responseString);
-    String result = findPattern(responseString);
-    if (result.length() > 0)
-    {
-      result.trim();
-      strncpy(response, result.c_str(), sizeof(response) - 1);
-      response[sizeof(response) - 1] = '\0'; // Ensure null-termination
-      break;                                 // Exit the loop after finding the pattern
-    }
-  }
-  if (response[0] != 0)
-  {
-    Serial.println(response);
-    assignCommand(response);
-  }
-  if (mode == AUTO)
-  {
-    autoMode();
-  }
-  String command = "h0.val=";
-  Serial2.print(command + 'd');
-  endNextionCommand();
-  delay(1);
+  // while (Serial2.available())
+  // {
+  //   String responseString = Serial2.readString();
+  //   Serial.println("data: " + responseString);
+  //   String result = findPattern(responseString);
+  //   if (result.length() > 0)
+  //   {
+  //     result.trim();
+  //     strncpy(response, result.c_str(), sizeof(response) - 1);
+  //     response[sizeof(response) - 1] = '\0'; // Ensure null-termination
+  //     break;                                 // Exit the loop after finding the pattern
+  //   }
+  // }
+  // if (response[0] != 0)
+  // {
+  //   Serial.println(response);
+  //   assignCommand(response);
+  // }
+  // if (mode == AUTO)
+  // {
+  //   autoMode();
+  // }
+
+  lcd.blowerSlider(random(0, 100));
+  lcd.ledSlider(random(0, 100));
+  lcd.pumpSlider(random(0, 100));
+
+  delay(1000);
 }
 
 void autoMode()
 {
-  if (data.temperature > 30)
-  {
-    Serial.println("Temperature is too high, turning on blower");
-    Serial2.print("blower.val=1");
-    endNextionCommand();
-  }
-  else
-  {
-    Serial.println("Temperature is normal, turning off blower");
-    Serial2.print("blower.val=0");
-    endNextionCommand();
-  }
+  // if (data.temperature > 30)
+  // {
+  //   Serial.println("Temperature is too high, turning on blower");
+  //   Serial2.print("blower.val=1");
+  //   endNextionCommand();
+  // }
+  // else
+  // {
+  //   Serial.println("Temperature is normal, turning off blower");
+  //   Serial2.print("blower.val=0");
+  //   endNextionCommand();
+  // }
 }
 
 void assignCommand(char response[])
@@ -164,14 +193,20 @@ void assignCommand(char response[])
   }
 }
 
-void readSensor()
+bool readSensor()
 {
   data.age = doc["age"].isNull() ? data.age : doc["age"];
   data.humidity = doc["humidity"].isNull() ? data.humidity : doc["humidity"];
   data.temperature = doc["temperature"].isNull() ? data.temperature : doc["temperature"];
-  data.ammonia = doc["ammonia"].isNull() ? data.ammonia : doc["ammonia"];
+  data.ammonia = doc["ammonia"].isNull() ? data.ammonia : random(0, 100) / 10.0F;
   data.lux = doc["light_intensity"].isNull() ? data.lux : doc["light_intensity"];
   data.windSpeed = doc["wind_speed"].isNull() ? data.windSpeed : doc["wind_speed"];
+
+  if (!doc["age"].isNull() || !doc["humidity"].isNull() || !doc["temperature"].isNull() || !doc["light_intensity"].isNull() || !doc["wind_speed"].isNull())
+  {
+    return true;
+  }
+  return false;
 }
 
 void callback(char *topic, byte *message, unsigned int length)
@@ -188,56 +223,6 @@ void callback(char *topic, byte *message, unsigned int length)
   }
   Serial.println();
   deserializeJson(doc, messageTemp);
-}
-
-void sendAgeToNextion()
-{
-  String command = "umur.txt=\"" + String(data.age) + "\"";
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void sendHumidityToNextion()
-{
-  String command = "humidity.txt=\"" + String(data.humidity) + "\"";
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void sendTemperatureToNextion()
-{
-  String command = "suhu.txt=\"" + String(data.temperature, 1) + "\"";
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void sendAmmoniaToNextion()
-{
-  String command = "amonia.txt=\"" + String(data.ammonia) + "\"";
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void sendLuxToNextion()
-{
-  String command = "lux.txt=\"" + String(data.lux) + "\"";
-  Serial.println("lux:" + String(data.lux));
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void sendWindSpeedToNextion()
-{
-  String command = "wind.txt=\"" + String(data.windSpeed) + "\"";
-  Serial2.print(command);
-  endNextionCommand();
-}
-
-void endNextionCommand()
-{
-  Serial2.write(0xff);
-  Serial2.write(0xff);
-  Serial2.write(0xff);
 }
 
 void setup_wifi()
