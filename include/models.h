@@ -27,9 +27,9 @@ struct SensorData
 
 struct DateTime
 {
-    int year = 2000;
-    int month = 1;
-    int day = 1;
+    int year = 2024;
+    int month = 9;
+    int day = 26;
 };
 
 enum RunMode

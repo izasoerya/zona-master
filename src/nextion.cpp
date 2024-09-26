@@ -46,13 +46,13 @@ void NextionLCD::sendWindSpeedToNextion(SensorData data)
 
 void NextionLCD::sendDateTimeToNextion(DateTime date)
 {
-    String commandDay = "day.txt=\"" + String(date.day) + "\"";
+    String commandDay = "day.txt=\"" + String("26") + "\"";
     Serial2.print(commandDay);
     endNextionCommand();
-    String commandMonth = "month.txt=\"" + String(date.month) + "\"";
+    String commandMonth = "month.txt=\"" + String("09") + "\"";
     Serial2.print(commandMonth);
     endNextionCommand();
-    String commandYear = "year.txt=\"" + String(date.year) + "\"";
+    String commandYear = "year.txt=\"" + String("2024") + "\"";
     Serial2.print(commandYear);
     endNextionCommand();
 }
@@ -76,4 +76,19 @@ void NextionLCD::ledSlider(int value)
     String command = "h2.val=" + String(value);
     Serial2.print(command);
     endNextionCommand();
+}
+
+void NextionLCD::printBlower()
+{
+    Serial2.print("print h0.val");
+}
+
+void NextionLCD::printPump()
+{
+    Serial2.print("print h1.val");
+}
+
+void NextionLCD::printLed()
+{
+    Serial2.print("print h2.val");
 }

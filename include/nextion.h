@@ -26,4 +26,8 @@ public:
     void blowerSlider(int value);
     void pumpSlider(int value);
     void ledSlider(int value);
+
+    void printBlower();
+    void printPump();
+    void printLed();
 };

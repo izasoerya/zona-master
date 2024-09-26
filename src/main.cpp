@@ -4,6 +4,7 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <regex> // Include the regex library
+#include <SoftwareSerial.h>
 
 #include "time.h"
 #include "models.h"
@@ -27,6 +28,7 @@ SensorData data;
 NextionLCD lcd;
 JsonDocument doc;
 DateTime date;
+EspSoftwareSerial::UART myPort;
 
 RunMode mode = NORMAL;
 
@@ -42,6 +44,7 @@ void setup()
 {
   Serial.begin(9600);
   Serial2.begin(9600);
+  myPort.begin(9600, SWSERIAL_8N1, 12, 13, false);
 
   randomSeed(analogRead(0));
 
@@ -50,7 +53,6 @@ void setup()
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
-  printLocalTime();
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 }
 
@@ -102,38 +104,77 @@ void loop()
     lcd.sendLuxToNextion(data);
     lcd.sendWindSpeedToNextion(data);
     lcd.sendDateTimeToNextion(date);
+    // printLocalTime();
+
+    delay(100);
   }
 
   memset(response, 0, sizeof(response));
 
-  // while (Serial2.available())
-  // {
-  //   String responseString = Serial2.readString();
-  //   Serial.println("data: " + responseString);
-  //   String result = findPattern(responseString);
-  //   if (result.length() > 0)
-  //   {
-  //     result.trim();
-  //     strncpy(response, result.c_str(), sizeof(response) - 1);
-  //     response[sizeof(response) - 1] = '\0'; // Ensure null-termination
-  //     break;                                 // Exit the loop after finding the pattern
-  //   }
-  // }
-  // if (response[0] != 0)
-  // {
-  //   Serial.println(response);
-  //   assignCommand(response);
-  // }
+  while (Serial2.available())
+  {
+    String responseString = Serial2.readString();
+    responseString.trim();
+    Serial.println("data: " + responseString);
+
+    // Modify the findPattern logic to handle null or char '0'
+    String result = findPattern(responseString);
+
+    if (result.length() > 0)
+    {
+      result.trim();
+
+      // Copy the result into the response buffer and ensure it's null-terminated
+      strncpy(response, result.c_str(), sizeof(response) - 1);
+      response[sizeof(response) - 1] = '\0'; // Ensure null-termination
+
+      // Loop through the string and handle null or '0' character cases
+      for (int i = 0; i < result.length(); i++)
+      {
+        char c = result.charAt(i);
+
+        // Check if it's a null character
+        if (c == '\0')
+        {
+          Serial.println("Null character detected");
+          continue; // Skip processing null character
+        }
+        else
+        {
+          // Process normally if it's a valid character
+          Serial.print("Processing char: ");
+          Serial.println(c);
+
+          // Convert the char to its decimal ASCII value and process as needed
+          int value = (int)c; // Convert char to decimal ASCII value
+          Serial.print("Decimal value: ");
+          Serial.println(value);
+
+          // You can store or use the decimal value without modifying the null terminator
+        }
+      }
+
+      break; // Exit the loop after finding the pattern
+    }
+  }
+
+  if (response[0] != 0)
+  {
+    Serial.println(response);
+    assignCommand(response);
+  }
   // if (mode == AUTO)
   // {
   //   autoMode();
   // }
 
-  lcd.blowerSlider(random(0, 100));
-  lcd.ledSlider(random(0, 100));
-  lcd.pumpSlider(random(0, 100));
+  // lcd.printBlower();
+  // lcd.printPump();
+  // lcd.printLed();
 
-  delay(1000);
+  // lcd.blowerSlider(random(0, 100));
+  // lcd.ledSlider(random(0, 100));
+  // lcd.pumpSlider(random(0, 100));
 }
 
 void autoMode()
@@ -157,32 +198,38 @@ void assignCommand(char response[])
   if (String(response[0]) + String(response[1]) == "00")
   {
     String asciiString = String(response[3]) + String(response[4]);
-    String result = "Blower";
+    String result = "blower,";
     for (int i = 0; i < asciiString.length(); i++)
     {
-      result += String((int)asciiString[i]) + " ";
+      int originalValue = (int)asciiString[i];
+      int mappedValue = (originalValue - 1) * 255 / 99;
+      String(mappedValue);
+      result += String((int)asciiString[i]) + ";";
     }
     Serial.println(result);
+    myPort.println(result);
   }
   else if (String(response[0]) + String(response[1]) == "01")
   {
     String asciiString = String(response[3]) + String(response[4]);
-    String result = "Pump";
+    String result = "pump,";
     for (int i = 0; i < asciiString.length(); i++)
     {
-      result += String((int)asciiString[i]) + " ";
+      result += String((int)asciiString[i]) + ";";
     }
     Serial.println(result);
+    myPort.println(result);
   }
   else if (String(response[0]) + String(response[1]) == "02")
   {
     String asciiString = String(response[3]) + String(response[4]);
-    String result = "Lampu";
+    String result = "led,";
     for (int i = 0; i < asciiString.length(); i++)
     {
-      result += String((int)asciiString[i]) + " ";
+      result += String((int)asciiString[i]) + ";";
     }
     Serial.println(result);
+    myPort.println(result);
   }
   else if (String(response[0]) + String(response[1]) == "03")
   {
